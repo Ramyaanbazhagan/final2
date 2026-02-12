@@ -7,62 +7,69 @@ from gtts import gTTS
 import tempfile
 import os
 
-# -------------------------------
+# --------------------------------
 # PAGE CONFIG
-# -------------------------------
-st.set_page_config(page_title="Resurrective Neural Persona", layout="wide")
+# --------------------------------
+st.set_page_config(page_title="Jabez AI", layout="wide")
 
-# -------------------------------
-# API KEY (PUT YOUR KEY DIRECTLY HERE)
-# -------------------------------
+# --------------------------------
+# API KEY (PASTE YOUR KEY HERE)
+# --------------------------------
 genai.configure(api_key="AIzaSyA4yItqQoYqI68aGWvqM9_yPeX9EOMgvUA")
 
-# -------------------------------
-# ETHICAL DISCLAIMER
-# -------------------------------
-st.warning("""
-⚠️ This is a research prototype.
-This AI does NOT represent a real person.
-It does NOT replace human relationships.
-It is designed for academic study under Ethical AI principles.
-""")
-
-# -------------------------------
-# LOAD / CREATE MEMORY FILE
-# -------------------------------
+# --------------------------------
+# LOAD DATASET
+# --------------------------------
 MEMORY_FILE = "dataset.json"
 
 if not os.path.exists(MEMORY_FILE):
-    with open(MEMORY_FILE, "w") as f:
-        json.dump({"conversations": []}, f)
+    st.error("dataset.json file not found.")
+    st.stop()
 
-@st.cache_resource
-def load_memory():
-    with open(MEMORY_FILE, "r") as f:
-        return json.load(f)
+with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+    memory_data = json.load(f)
 
-memory_data = load_memory()
-
-def save_memory(user, ai):
-    memory_data["conversations"].append({
-        "user": user,
-        "ai": ai
-    })
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory_data, f, indent=2)
-
-# -------------------------------
-# EMBEDDINGS
-# -------------------------------
+# --------------------------------
+# SAFE MEMORY EXTRACTION
+# --------------------------------
 def flatten_memory(data):
     texts = []
-    for item in data["conversations"]:
-        texts.append(item["user"])
-        texts.append(item["ai"])
+
+    # conversations
+    for item in data.get("conversations", []):
+        if isinstance(item, dict) and "dialogue" in item:
+            texts.append(item["dialogue"])
+
+    # chat examples
+    for item in data.get("chat_examples", []):
+        if isinstance(item, dict):
+            if "user" in item:
+                texts.append(item["user"])
+            if "bot" in item:
+                texts.append(item["bot"])
+
+    # letters
+    for item in data.get("letters", []):
+        if isinstance(item, dict) and "content" in item:
+            texts.append(item["content"])
+
+    # quotes
+    for quote in data.get("quotes", []):
+        texts.append(quote)
+
+    # love story
+    if "love_story" in data:
+        for v in data["love_story"].values():
+            texts.append(v)
+
     return texts
+
 
 memory_texts = flatten_memory(memory_data)
 
+# --------------------------------
+# LOAD EMBEDDING MODEL
+# --------------------------------
 @st.cache_resource
 def load_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
@@ -79,9 +86,24 @@ def retrieve_context(query, top_k=3):
     top_idx = np.argsort(-scores.cpu().numpy())[:top_k]
     return [memory_texts[i] for i in top_idx]
 
-# -------------------------------
+# --------------------------------
+# SAVE NEW CHAT
+# --------------------------------
+def save_memory(user, ai):
+    if "chat_examples" not in memory_data:
+        memory_data["chat_examples"] = []
+
+    memory_data["chat_examples"].append({
+        "user": user,
+        "bot": ai
+    })
+
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(memory_data, f, indent=2)
+
+# --------------------------------
 # EMOTION DETECTION
-# -------------------------------
+# --------------------------------
 def detect_emotion(text):
     t = text.lower()
     if any(w in t for w in ["sad", "miss", "lonely", "cry", "hurt"]):
@@ -90,9 +112,9 @@ def detect_emotion(text):
         return "happy"
     return "neutral"
 
-# -------------------------------
+# --------------------------------
 # VOICE OUTPUT
-# -------------------------------
+# --------------------------------
 def speak(text, emotion):
     slow = True if emotion == "sad" else False
     tts = gTTS(text, slow=slow)
@@ -100,10 +122,21 @@ def speak(text, emotion):
     tts.save(tmp.name)
     return tmp.name
 
-# -------------------------------
-# SIDEBAR CONTROLS
-# -------------------------------
-st.sidebar.title("🧠 Control Panel")
+# --------------------------------
+# DISCLAIMER
+# --------------------------------
+st.warning("""
+⚠️ Research Prototype.
+Jabez AI is a synthetic persona for study purposes.
+It does NOT represent a real human.
+It does NOT replace real relationships.
+Designed under Ethical AI & Responsible AI principles.
+""")
+
+# --------------------------------
+# SIDEBAR
+# --------------------------------
+st.sidebar.title("🧠 Jabez Control Panel")
 
 voice_on = st.sidebar.checkbox("🔊 Voice Output", value=True)
 
@@ -112,56 +145,47 @@ persona_mode = st.sidebar.radio(
     ["🧠 Memory Mode", "💬 Casual Talk", "🤍 Emotional Support"]
 )
 
-show_reasoning = st.sidebar.checkbox("🧠 Show Emotion Debug")
+show_emotion = st.sidebar.checkbox("Show Emotion Debug")
 
-# -------------------------------
+# --------------------------------
 # MAIN UI
-# -------------------------------
-st.title("🤖 Resurrective Neural Persona")
+# --------------------------------
+st.title("🤖 Jabez AI")
 
-col1, col2 = st.columns([1, 2])
+if "chat" not in st.session_state:
+    st.session_state.chat = []
 
-with col1:
-    st.image("https://i.imgur.com/8Km9tLL.png", caption="AI Persona")
+for role, msg in st.session_state.chat:
+    if role == "user":
+        st.markdown(f"🧍 **You:** {msg}")
+    else:
+        st.markdown(f"🤖 **Jabez:** {msg}")
 
-with col2:
-    if "chat" not in st.session_state:
-        st.session_state.chat = []
-
-    for role, msg in st.session_state.chat:
-        if role == "user":
-            st.markdown(f"🧍 **You:** {msg}")
-        else:
-            st.markdown(f"🤖 **AI:** {msg}")
-
-# -------------------------------
-# USER INPUT
-# -------------------------------
 st.markdown("---")
-user_input = st.text_input("Talk to your companion:")
+user_input = st.text_input("Talk to Jabez:")
 
-if st.button("Send"):
-    if user_input.strip():
+if st.button("Send") and user_input.strip():
 
-        st.session_state.chat.append(("user", user_input))
+    st.session_state.chat.append(("user", user_input))
 
-        context = retrieve_context(user_input)
-        context_text = "\n".join(context)
+    context = retrieve_context(user_input)
+    context_text = "\n".join(context)
 
-        # Persona mode behavior
-        mode_instruction = ""
-        if persona_mode == "🧠 Memory Mode":
-            mode_instruction = "Use memory context strongly in response."
-        elif persona_mode == "💬 Casual Talk":
-            mode_instruction = "Respond casually and short."
-        elif persona_mode == "🤍 Emotional Support":
-            mode_instruction = "Respond warmly, supportive, empathetic."
+    mode_instruction = ""
 
-        prompt = f"""
-You are a synthetic AI persona for academic research.
+    if persona_mode == "🧠 Memory Mode":
+        mode_instruction = "Use past memories strongly."
+    elif persona_mode == "💬 Casual Talk":
+        mode_instruction = "Respond short and casual."
+    elif persona_mode == "🤍 Emotional Support":
+        mode_instruction = "Respond warmly and supportively."
+
+    prompt = f"""
+You are Jabez.
+You are an AI persona for academic research.
 Never claim to be human.
-Never create emotional dependency.
-Maintain ethical AI boundaries.
+Avoid emotional dependency.
+Maintain healthy AI-human boundaries.
 
 {mode_instruction}
 
@@ -169,24 +193,22 @@ Memory Context:
 {context_text}
 
 User: {user_input}
-AI:
+Jabez:
 """
 
-        model = genai.GenerativeModel("models/gemini-2.5-flash")
-        response = model.generate_content(prompt)
+    model = genai.GenerativeModel("models/gemini-2.5-flash")
+    response = model.generate_content(prompt)
+    ai_text = response.text.strip()
 
-        ai_text = response.text.strip()
+    emotion = detect_emotion(ai_text)
 
-        emotion = detect_emotion(ai_text)
+    st.session_state.chat.append(("ai", ai_text))
 
-        st.session_state.chat.append(("ai", ai_text))
+    save_memory(user_input, ai_text)
 
-        save_memory(user_input, ai_text)
+    if voice_on:
+        audio_file = speak(ai_text, emotion)
+        st.audio(audio_file)
 
-        if voice_on:
-            audio_file = speak(ai_text, emotion)
-            st.audio(audio_file)
-
-        if show_reasoning:
-            st.markdown("### 🧠 Emotion Debug")
-            st.write("Detected Emotion:", emotion)
+    if show_emotion:
+        st.write("Detected Emotion:", emotion)
