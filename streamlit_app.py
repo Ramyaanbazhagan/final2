@@ -6,7 +6,6 @@ import google.generativeai as genai
 from gtts import gTTS
 import tempfile
 import os
-import time
 
 # --------------------------------
 # PAGE CONFIG
@@ -14,7 +13,7 @@ import time
 st.set_page_config(page_title="Jabez AI", layout="wide")
 
 # --------------------------------
-# API KEY
+# API KEY (PASTE YOUR KEY HERE)
 # --------------------------------
 genai.configure(api_key="AIzaSyCldpP82Z5R-AtOsE-YnqPSjDzJmt-Y0k4")
 
@@ -31,32 +30,45 @@ with open(MEMORY_FILE, "r", encoding="utf-8") as f:
     memory_data = json.load(f)
 
 # --------------------------------
-# FLATTEN MEMORY
+# SAFE MEMORY EXTRACTION
 # --------------------------------
 def flatten_memory(data):
     texts = []
 
+    # conversations
     for item in data.get("conversations", []):
         if isinstance(item, dict) and "dialogue" in item:
             texts.append(item["dialogue"])
 
+    # chat examples
     for item in data.get("chat_examples", []):
         if isinstance(item, dict):
-            texts.append(item.get("user", ""))
-            texts.append(item.get("bot", ""))
+            if "user" in item:
+                texts.append(item["user"])
+            if "bot" in item:
+                texts.append(item["bot"])
 
+    # letters
     for item in data.get("letters", []):
-        texts.append(item.get("content", ""))
+        if isinstance(item, dict) and "content" in item:
+            texts.append(item["content"])
 
+    # quotes
     for quote in data.get("quotes", []):
         texts.append(quote)
 
-    return [t for t in texts if t.strip()]
+    # love story
+    if "love_story" in data:
+        for v in data["love_story"].values():
+            texts.append(v)
+
+    return texts
+
 
 memory_texts = flatten_memory(memory_data)
 
 # --------------------------------
-# EMBEDDINGS
+# LOAD EMBEDDING MODEL
 # --------------------------------
 @st.cache_resource
 def load_model():
@@ -75,13 +87,16 @@ def retrieve_context(query, top_k=3):
     return [memory_texts[i] for i in top_idx]
 
 # --------------------------------
-# SAVE MEMORY
+# SAVE NEW CHAT
 # --------------------------------
 def save_memory(user, ai):
     if "chat_examples" not in memory_data:
         memory_data["chat_examples"] = []
 
-    memory_data["chat_examples"].append({"user": user, "bot": ai})
+    memory_data["chat_examples"].append({
+        "user": user,
+        "bot": ai
+    })
 
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(memory_data, f, indent=2)
@@ -98,7 +113,7 @@ def detect_emotion(text):
     return "neutral"
 
 # --------------------------------
-# VOICE
+# VOICE OUTPUT
 # --------------------------------
 def speak(text, emotion):
     slow = True if emotion == "sad" else False
@@ -108,7 +123,18 @@ def speak(text, emotion):
     return tmp.name
 
 # --------------------------------
-# SIDEBAR CONTROLS
+# DISCLAIMER
+# --------------------------------
+st.warning("""
+⚠️ Research Prototype.
+Jabez AI is a synthetic persona for study purposes.
+It does NOT represent a real human.
+It does NOT replace real relationships.
+Designed under Ethical AI & Responsible AI principles.
+""")
+
+# --------------------------------
+# SIDEBAR
 # --------------------------------
 st.sidebar.title("🧠 Jabez Control Panel")
 
@@ -119,90 +145,47 @@ persona_mode = st.sidebar.radio(
     ["🧠 Memory Mode", "💬 Casual Talk", "🤍 Emotional Support"]
 )
 
-face_mode = st.sidebar.checkbox("🎥 Face-to-Face Mode")
-
-theme_mode = st.sidebar.radio("Theme", ["Light", "Dark"])
+show_emotion = st.sidebar.checkbox("Show Emotion Debug")
 
 # --------------------------------
-# THEME CSS
+# MAIN UI
 # --------------------------------
-if theme_mode == "Dark":
-    st.markdown("""
-    <style>
-    body {background-color:#0e1117;color:white;}
-    .stTextInput>div>div>input {background-color:#1e2228;color:white;}
-    </style>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-    <style>
-    body {background-color:#f5f7fa;}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --------------------------------
-# DISCLAIMER
-# --------------------------------
-st.warning("""
-⚠️ Research Prototype – Synthetic AI Persona.
-Does NOT represent a real human.
-Maintains ethical AI-human boundaries.
-""")
-
-# --------------------------------
-# MAIN TITLE
-# --------------------------------
-st.title("🤖 Jabez AI Neural Persona")
+st.title("🤖 Jabez AI")
 
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-# --------------------------------
-# CHAT BUBBLES
-# --------------------------------
 for role, msg in st.session_state.chat:
     if role == "user":
-        st.markdown(f"""
-        <div style='background:#DCF8C6;padding:10px;border-radius:10px;margin:5px;text-align:right;'>
-        🧍 {msg}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"🧍 **You:** {msg}")
     else:
-        st.markdown(f"""
-        <div style='background:#E4E6EB;padding:10px;border-radius:10px;margin:5px;text-align:left;'>
-        🤖 {msg}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"🤖 **Jabez:** {msg}")
 
 st.markdown("---")
 user_input = st.text_input("Talk to Jabez:")
 
-# --------------------------------
-# GENERATE RESPONSE
-# --------------------------------
 if st.button("Send") and user_input.strip():
 
     st.session_state.chat.append(("user", user_input))
 
-    with st.spinner("Jabez is thinking..."):
-        time.sleep(1)
+    context = retrieve_context(user_input)
+    context_text = "\n".join(context)
 
-        context = retrieve_context(user_input)
-        context_text = "\n".join(context)
+    mode_instruction = ""
 
-        mode_instruction = ""
-        if persona_mode == "🧠 Memory Mode":
-            mode_instruction = "Use memory context strongly."
-        elif persona_mode == "💬 Casual Talk":
-            mode_instruction = "Respond short and casual."
-        else:
-            mode_instruction = "Respond warmly and supportively."
+    if persona_mode == "🧠 Memory Mode":
+        mode_instruction = "Use past memories strongly."
+    elif persona_mode == "💬 Casual Talk":
+        mode_instruction = "Respond short and casual."
+    elif persona_mode == "🤍 Emotional Support":
+        mode_instruction = "Respond warmly and supportively."
 
-        prompt = f"""
+    prompt = f"""
 You are Jabez.
-You are a synthetic AI persona for academic research.
+You are an AI persona for academic research.
 Never claim to be human.
 Avoid emotional dependency.
+Maintain healthy AI-human boundaries.
 
 {mode_instruction}
 
@@ -213,35 +196,19 @@ User: {user_input}
 Jabez:
 """
 
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
-        ai_text = response.text.strip()
+    model = genai.GenerativeModel("models/gemini-2.5-flash")
+    response = model.generate_content(prompt)
+    ai_text = response.text.strip()
 
     emotion = detect_emotion(ai_text)
 
     st.session_state.chat.append(("ai", ai_text))
+
     save_memory(user_input, ai_text)
 
-    # --------------------------------
-    # EMOTION AVATAR
-    # --------------------------------
-    if face_mode:
-        if emotion == "happy":
-            st.image("https://i.imgur.com/1XqQZ5F.png", width=200)
-        elif emotion == "sad":
-            st.image("https://i.imgur.com/Q6aZQ4S.png", width=200)
-        else:
-            st.image("https://i.imgur.com/8Km9tLL.png", width=200)
-
-    # Emotion Badge
-    color = "green" if emotion=="happy" else "blue" if emotion=="neutral" else "red"
-    st.markdown(f"""
-    <span style='background:{color};color:white;padding:5px 10px;border-radius:10px;'>
-    Emotion: {emotion.upper()}
-    </span>
-    """, unsafe_allow_html=True)
-
-    # Voice
     if voice_on:
         audio_file = speak(ai_text, emotion)
         st.audio(audio_file)
+
+    if show_emotion:
+        st.write("Detected Emotion:", emotion)
