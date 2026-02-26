@@ -15,7 +15,7 @@ st.set_page_config(page_title="Jabez AI", layout="wide")
 # --------------------------------
 # API KEY (PASTE YOUR KEY HERE)
 # --------------------------------
-genai.configure(api_key="PASTE_YOUR_GEMINI_API_KEY_HERE")
+genai.configure(api_key="AIzaSyAWb1rpsJRaNGxikG2b2B2ys9f2N9bb5kk")
 
 # --------------------------------
 # LOAD DATASET
